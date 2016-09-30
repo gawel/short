@@ -32,9 +32,16 @@ def main(args):
     alias = args['<alias>']
     url = args['<url>']
     if alias:
+        resp = None
         if args['-d']:
-            resp = session.delete(url + alias)
+            print('Deleting...')
+            resp = session.delete(admin_url + alias)
         elif url:
-            resp = session.post(admin_url,
-                                json=dict(alias=alias, url=url))
-        print(resp)
+            print('Posting...')
+            resp = session.post(admin_url + alias,
+                                json=dict(url=url))
+        if resp is not None:
+            try:
+                print(resp.json())
+            except ValueError:
+                print(resp.content)
