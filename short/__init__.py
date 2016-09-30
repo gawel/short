@@ -44,27 +44,19 @@ def admin(req, resp):
     err = check_auth(req)
     if err is not None:
         return err
-    path = [p for p in req.path_info.strip('/').split('/', 2)[1:] if p]
+    path = [p for p in req.path_info.strip('/').split('/', 3)[1:] if p]
     db_name, rdb = get_db(path)
     result = {}
     if req.method == 'DELETE':
-        if len(path) == 2:
-            data = dict(alias=path[1])
-        else:
-            try:
-                data = req.json
-            except ValueError:
-                return exc.HTTPBadRequest()
+        data = dict(alias=path[-1])
         rdb.remove(Query().alias == data['alias'])
+        result = data
     elif req.method == 'POST':
-        if len(path) == 2:
-            data = dict(alias=path[1])
-        else:
-            try:
-                data = req.json
-            except ValueError:
-                return exc.HTTPBadRequest()
-        data.update(req.json)
+        data = dict(alias=path[-1])
+        try:
+            data.update(req.json)
+        except ValueError:
+            return exc.HTTPBadRequest()
         for k in ('alias', 'url'):
             if k not in data:
                 return exc.HTTPBadRequest()
@@ -78,7 +70,8 @@ def admin(req, resp):
     elif req.method == 'GET':
         if rdb is db:
             for table in db.tables():
-                result[table.strip('_')] = db.table(table).all()
+                items = db.table(table).all()
+                result[table.strip('_')] = sorted(items, key=itemgetter('alias'))
         else:
             result[db_name] = rdb.all()
         bm = req.accept.best_match(['text/html', 'application/json'])
@@ -86,10 +79,12 @@ def admin(req, resp):
             body = '<html><body>'
             for k, v in sorted(result.items()):
                 body += "<h2>{}</h2>".format(k)
+                body += "<ul>"
                 for item in sorted(v, key=itemgetter('alias')):
                     body += (
-                        '<div><a href="{url}">{alias:<10} {url}</a><div>'
+                        '<li><a href="{url}">{alias:<10} - {url}</a></li>'
                     ).format(**item)
+                body += "</ul>"
             body += '</body></html>'
             resp.content_type = 'text/html'
             resp.text = body
