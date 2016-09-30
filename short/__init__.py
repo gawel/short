@@ -8,7 +8,7 @@ from webob import Response
 from tinydb import TinyDB
 from tinydb import Query
 
-db_path = os.path.expanduser('~/.short.db')
+db_path = os.path.expanduser('~/.short.json')
 db = TinyDB(db_path)
 
 auth = os.environ.get('SHORT_AUTH')
@@ -98,7 +98,7 @@ def admin(req, resp):
     return resp
 
 
-def application(environ, start_response):
+def _application(environ, start_response):
     req = Request(environ)
     resp = Response()
     resp.content_type = 'application/json'
@@ -123,4 +123,13 @@ def application(environ, start_response):
                 resp = exc.HTTPFound(location=data['url'])
         else:
             resp = exc.HTTPNotFound()
+    return resp
+
+def application(environ, start_response):
+    try:
+        resp =_application(environ, start_response)
+    except Exception as e:
+        import traceback
+        resp = Response()
+        traceback.print_exc(file=resp.body_file)
     return resp(environ, start_response)
