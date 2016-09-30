@@ -32,6 +32,9 @@ setup(
     install_requires=[
         'webob',
         'tinydb',
+        'chut',
+        'requests',
+        'waitress',
     ],
     extras_require={
         'test': [
@@ -40,6 +43,6 @@ setup(
     },
     entry_points="""
     [console_scripts]
-    #short = short.scripts:main
+    short = short.scripts:main
     """,
 )

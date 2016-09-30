@@ -13,14 +13,15 @@ db = TinyDB(db_path)
 
 auth = os.environ.get('SHORT_AUTH')
 if auth is not None:
-    auth = base64.encodestring(auth)
+    auth = base64.encodestring(auth.encode('utf8')).strip().decode('utf8')
 
 
 def get_db(path):
     if len(path):
         db_name = path[0]
-        if db_name == 'default':
-            rdb = db
+        if db_name in ('d', 'default'):
+            db_name = 'default'
+            rdb = db.table('_default')
         else:
             rdb = db.table(db_name)
     else:
@@ -29,20 +30,45 @@ def get_db(path):
     return db_name, rdb
 
 
-def admin(req, resp):
+def check_auth(req):
     rauth = req.authorization
+    if rauth is None:
+        resp = exc.HTTPUnauthorized()
+        resp.www_authenticate = 'Basic realm="Auth"'
+        return resp
     if rauth != ('Basic', auth):
         return exc.HTTPForbidden()
-    path = [p for p in req.path.split('/')[2:] if p]
+
+
+def admin(req, resp):
+    err = check_auth(req)
+    if err is not None:
+        return err
+    path = [p for p in req.path_info.strip('/').split('/', 2)[1:] if p]
     db_name, rdb = get_db(path)
     result = {}
-    if req.method == 'POST':
-        data = req.json
+    if req.method == 'DELETE':
+        if len(path) == 2:
+            data = dict(alias=path[1])
+        else:
+            try:
+                data = req.json
+            except ValueError:
+                return exc.HTTPBadRequest()
+        rdb.remove(Query().alias == data['alias'])
+    elif req.method == 'POST':
+        if len(path) == 2:
+            data = dict(alias=path[1])
+        else:
+            try:
+                data = req.json
+            except ValueError:
+                return exc.HTTPBadRequest()
+        data.update(req.json)
         for k in ('alias', 'url'):
             if k not in data:
                 return exc.HTTPBadRequest()
-        Q = Query()
-        q = (Q.alias == data['alias']) | (Q.url == data['url'])
+        q = Query().alias == data['alias']
         res = rdb.search(q)
         if res:
             rdb.update(data, q)
@@ -62,11 +88,11 @@ def admin(req, resp):
                 body += "<h2>{}</h2>".format(k)
                 for item in sorted(v, key=itemgetter('alias')):
                     body += (
-                        '<div><a href="{url}">{alias} - {url}</a><div>'
+                        '<div><a href="{url}">{alias:<10} {url}</a><div>'
                     ).format(**item)
             body += '</body></html>'
             resp.content_type = 'text/html'
-            resp.body = body
+            resp.text = body
     if resp.content_type == 'application/json':
         resp.json = result
     return resp
@@ -74,11 +100,16 @@ def admin(req, resp):
 
 def application(environ, start_response):
     req = Request(environ)
-    resp = Response(content_type='application/json')
-    if req.path_info.startswith('/admin/'):
+    resp = Response()
+    resp.content_type = 'application/json'
+    resp.charset = 'utf8'
+    if not req.path_info.strip('/').strip():
+        resp = exc.HTTPNotFound()
+    elif req.path_info.startswith('/admin/'):
         resp = admin(req, resp)
     else:
-        path = [p for p in req.path.split('/') if p]
+        bm = req.accept.best_match(['text/html', 'application/json'])
+        path = [p for p in req.path_info.strip('/').split('/', 1) if p]
         if len(path) == 1:
             path.insert(0, '_default')
         db_name, alias = path[0:2]
@@ -86,7 +117,6 @@ def application(environ, start_response):
         res = rdb.search(Query().alias == alias)
         if len(res):
             data = res[0]
-            bm = req.accept.best_match(['text/html', 'application/json'])
             if 'application/json' in bm:
                 resp.json = data
             else:
