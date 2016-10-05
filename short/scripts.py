@@ -21,12 +21,12 @@ def main(args):
     session.auth = auth
     if args['-l']:
         resp = session.get(admin_url)
-        for db_name, items in resp.json().items():
+        for db_name, items in sorted(resp.json().items()):
             if len(items):
                 print(db_name)
                 print('=' * len(db_name))
                 for item in items:
-                    print('{alias:<10}{url}'.format(**item))
+                    print(u'{alias:<10}{url}'.format(**item))
                 print('')
         return
     alias = args['<alias>']
