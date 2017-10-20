@@ -45,6 +45,7 @@ def clean(req, resp):
         items = db.table(table).all()
         if not len(items):
             db.purge_table(table)
+    return resp
 
 
 def admin(req, resp):
@@ -133,7 +134,7 @@ def _application(environ, start_response):
 
 def application(environ, start_response):
     try:
-        resp = application(environ, start_response)
+        resp = _application(environ, start_response)
     except Exception as e:
         import traceback
         resp = Response()
