@@ -40,6 +40,13 @@ def check_auth(req):
         return exc.HTTPForbidden()
 
 
+def clean(req, resp):
+    for table in db.tables():
+        items = db.table(table).all()
+        if not len(items):
+            db.purge_table(table)
+
+
 def admin(req, resp):
     err = check_auth(req)
     if err is not None:
@@ -71,7 +78,8 @@ def admin(req, resp):
         if rdb is db:
             for table in db.tables():
                 items = db.table(table).all()
-                result[table.strip('_')] = sorted(items, key=itemgetter('alias'))
+                result[table.strip('_')] = sorted(items,
+                                                  key=itemgetter('alias'))
         else:
             result[db_name] = rdb.all()
         bm = req.accept.best_match(['text/html', 'application/json'])
@@ -102,6 +110,8 @@ def _application(environ, start_response):
         resp = exc.HTTPNotFound()
     elif req.path_info.startswith('/admin/'):
         resp = admin(req, resp)
+    elif req.path_info == "/clean":
+        resp = clean(req, resp)
     else:
         bm = req.accept.best_match(['text/html', 'application/json'])
         path = [p for p in req.path_info.strip('/').split('/', 1) if p]
@@ -120,9 +130,10 @@ def _application(environ, start_response):
             resp = exc.HTTPNotFound()
     return resp
 
+
 def application(environ, start_response):
     try:
-        resp =_application(environ, start_response)
+        resp = application(environ, start_response)
     except Exception as e:
         import traceback
         resp = Response()
