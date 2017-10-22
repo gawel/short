@@ -9,7 +9,7 @@ from tinydb import TinyDB
 from tinydb import Query
 
 db_path = os.path.expanduser('~/.short.json')
-db = TinyDB(db_path)
+db = TinyDB(db_path, sort_keys=True, indent=4)
 
 auth = os.environ.get('SHORT_AUTH')
 if auth is not None:
