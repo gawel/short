@@ -8,9 +8,8 @@ import requests
 def main(args):
     """Usage: short [--serve] [-l] [-d] [<alias>] [<url>]"""
     if args['--serve']:
-        import waitress
-        from short import application
-        waitress.serve(application)
+        import short
+        short.main()
         return
     cfg = ini('~/.short.ini').short
     url = cfg.url.strip('/')

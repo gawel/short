@@ -4,7 +4,7 @@ from operator import itemgetter
 from webob import Request
 from tinydb import (TinyDB, Query)
 from bottle import (
-    route, run, debug, request, response, default_app, redirect,
+    route, run, debug, request, template, default_app, redirect,
     auth_basic, abort, error,
 )
 
@@ -63,18 +63,8 @@ def admin(path=''):
         result[path] = db.table(db_name).all()
     print('bm', bm)
     if 'application/json' not in bm:
-        body = '<html><body>'
-        for k, v in sorted(result.items()):
-            body += "<h2>{}</h2>".format(k)
-            body += "<ul>"
-            for item in sorted(v, key=itemgetter('alias')):
-                body += (
-                    '<li><a href="{url}">{alias:<10} - {url}</a></li>'
-                ).format(**item)
-            body += "</ul>"
-        body += '</body></html>'
-        response.content_type = 'text/html'
-        return body
+        return template('admin', sorted=sorted, itemgetter=itemgetter,
+                        results=result.items())
     return result
 
 
@@ -130,8 +120,13 @@ def admin_delete(path='/'):
     return {}
 
 
+@route('/')
+def index():
+    return template('index', msg='Hi there')
+
+
 @route('/<path:path>')
-def index(path):
+def rdr(path):
     req = Request(request.environ)
     bm = req.accept.best_match(['text/html', 'application/json'])
     print(path, bm)
@@ -159,7 +154,7 @@ def error_404(e):
     bm = req.accept.best_match(['text/html', 'application/json'])
     if 'application/json' in bm:
         return {}
-    return "404"
+    return template('index', msg='Not found')
 
 
 def main():
