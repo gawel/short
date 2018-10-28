@@ -15,6 +15,7 @@ def rm():
 
 @pytest.fixture(scope='function')
 def db(request):
+    short.debug(mode=True)
     rm()
     db = short.db = short.TinyDB(db_path)
     db.insert(dict(alias='a', url='http://toto.com'))
@@ -33,6 +34,6 @@ def app(request):
 
 @pytest.fixture(scope='function')
 def admin_app(request):
-    short.auth = base64.encodestring(b'admin:admin').strip().decode('utf8')
+    auth = base64.encodestring(b'admimin:passwd').strip().decode('utf8')
     return TestApp(short.application,
-                   extra_environ={'HTTP_AUTHORIZATION': 'Basic ' + short.auth})
+                   extra_environ={'HTTP_AUTHORIZATION': 'Basic ' + auth})

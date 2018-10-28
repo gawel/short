@@ -1,15 +1,11 @@
 language: python
-services:
-  - redis-server
+cache: pip
+
+matrix:
+  include:
+    - python: 3.6
+
 install:
-  - pip install tox coveralls
+  - pip install tox-travis
 script:
   - tox
-after_success:
-  - coveralls
-env:
-  - TOXENV=py27
-  - TOXENV=py33
-  - TOXENV=py34
-  - TOXENV=flake8
-  - TOXENV=docs

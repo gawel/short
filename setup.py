@@ -17,8 +17,7 @@ setup(
     long_description=read('README.rst'),
     classifiers=[
         'Intended Audience :: Developers',
-        'Programming Language :: Python :: 3.4',
-        'Programming Language :: Python :: 3.5',
+        'Programming Language :: Python :: 3',
         'License :: OSI Approved :: MIT License',
     ],
     keywords='',
@@ -33,6 +32,7 @@ setup(
         'webob',
         'tinydb',
         'chut',
+        'bottle',
         'requests',
         'waitress',
     ],

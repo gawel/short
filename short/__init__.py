@@ -1,19 +1,25 @@
 # -*- coding: utf-8 -*-
 import os
-import base64
 from operator import itemgetter
-from webob import exc
 from webob import Request
-from webob import Response
-from tinydb import TinyDB
-from tinydb import Query
+from tinydb import (TinyDB, Query)
+from bottle import (
+    route, run, debug, request, response, default_app, redirect,
+    auth_basic, abort, error,
+)
 
 db_path = os.path.expanduser('~/.short.json')
 db = TinyDB(db_path, sort_keys=True, indent=4)
 
-auth = os.environ.get('SHORT_AUTH')
-if auth is not None:
-    auth = base64.encodestring(auth.encode('utf8')).strip().decode('utf8')
+auth = tuple(os.environ.get('SHORT_AUTH', 'admimin:passwd').split(':'))
+
+Alias = Query()
+
+
+def check_auth(user, pw):
+    if (user, pw) == auth:
+        return True
+    return False
 
 
 def get_db(path):
@@ -30,113 +36,136 @@ def get_db(path):
     return db_name, rdb
 
 
-def check_auth(req):
-    rauth = req.authorization
-    if rauth is None:
-        resp = exc.HTTPUnauthorized()
-        resp.www_authenticate = 'Basic realm="Auth"'
-        return resp
-    if rauth != ('Basic', auth):
-        return exc.HTTPForbidden()
-
-
-def clean(req, resp):
+@route('/clean')
+def clean():
     for table in db.tables():
         items = db.table(table).all()
         if not len(items):
             db.purge_table(table)
-    return resp
+    return redirect('/admin/')
 
 
-def admin(req, resp):
-    err = check_auth(req)
-    if err is not None:
-        return err
-    path = [p for p in req.path_info.strip('/').split('/', 3)[1:] if p]
-    db_name, rdb = get_db(path)
+@route('/admin/')
+@route('/admin/<path:path>')
+@auth_basic(check_auth)
+def admin(path=''):
+    req = Request(request.environ)
+    path = path.strip('/')
     result = {}
-    if req.method == 'DELETE':
-        data = dict(alias=path[-1])
-        rdb.remove(Query().alias == data['alias'])
-        result = data
-    elif req.method == 'POST':
-        data = dict(alias=path[-1])
-        try:
-            data.update(req.json)
-        except ValueError:
-            return exc.HTTPBadRequest()
-        for k in ('alias', 'url'):
-            if k not in data:
-                return exc.HTTPBadRequest()
-        q = Query().alias == data['alias']
-        res = rdb.search(q)
-        if res:
-            rdb.update(data, q)
-        else:
-            rdb.insert(data)
-        result[db_name] = data
-    elif req.method == 'GET':
-        if rdb is db:
-            for table in db.tables():
-                items = db.table(table).all()
-                result[table.strip('_')] = sorted(items,
-                                                  key=itemgetter('alias'))
-        else:
-            result[db_name] = rdb.all()
-        bm = req.accept.best_match(['text/html', 'application/json'])
-        if 'application/json' not in bm:
-            body = '<html><body>'
-            for k, v in sorted(result.items()):
-                body += "<h2>{}</h2>".format(k)
-                body += "<ul>"
-                for item in sorted(v, key=itemgetter('alias')):
-                    body += (
-                        '<li><a href="{url}">{alias:<10} - {url}</a></li>'
-                    ).format(**item)
-                body += "</ul>"
-            body += '</body></html>'
-            resp.content_type = 'text/html'
-            resp.text = body
-    if resp.content_type == 'application/json':
-        resp.json = result
-    return resp
-
-
-def _application(environ, start_response):
-    req = Request(environ)
-    resp = Response()
-    resp.content_type = 'application/json'
-    resp.charset = 'utf8'
-    if not req.path_info.strip('/').strip():
-        resp = exc.HTTPNotFound()
-    elif req.path_info.startswith('/admin/'):
-        resp = admin(req, resp)
-    elif req.path_info == "/clean":
-        resp = clean(req, resp)
+    bm = req.accept.best_match(['text/html', 'application/json'])
+    if not path:
+        for table in db.tables():
+            items = db.table(table).all()
+            result[table.strip('_')] = sorted(items,
+                                              key=itemgetter('alias'))
     else:
-        bm = req.accept.best_match(['text/html', 'application/json'])
-        path = [p for p in req.path_info.strip('/').split('/', 1) if p]
-        if len(path) == 1:
-            path.insert(0, '_default')
-        db_name, alias = path[0:2]
-        db_name, rdb = get_db([db_name])
-        res = rdb.search(Query().alias == alias)
-        if len(res):
-            data = res[0]
-            if 'application/json' in bm:
-                resp.json = data
-            else:
-                resp = exc.HTTPFound(location=data['url'])
-        else:
-            resp = exc.HTTPNotFound()
-    return resp
+        db_name = '_default' if path == 'default' else path
+        result[path] = db.table(db_name).all()
+    print('bm', bm)
+    if 'application/json' not in bm:
+        body = '<html><body>'
+        for k, v in sorted(result.items()):
+            body += "<h2>{}</h2>".format(k)
+            body += "<ul>"
+            for item in sorted(v, key=itemgetter('alias')):
+                body += (
+                    '<li><a href="{url}">{alias:<10} - {url}</a></li>'
+                ).format(**item)
+            body += "</ul>"
+        body += '</body></html>'
+        response.content_type = 'text/html'
+        return body
+    return result
 
 
-def application(environ, start_response):
+@route('/admin/', method='POST')
+@route('/admin/<path:path>', method='POST')
+@auth_basic(check_auth)
+def admin_post(path=''):
+    if request.content_type != 'application/json':
+        abort(400)
     try:
-        resp = _application(environ, start_response)
-    except Exception as e:
-        import traceback
-        resp = Response()
-        traceback.print_exc(file=resp.body_file)
-    return resp(environ, start_response)
+        db_name, path = path.strip('/').split('/')
+    except Exception:
+        abort(400)
+    if db_name in ('d', 'default', 'defaults'):
+        db_name = '_default'
+    rdb = db.table(db_name)
+    data = {'alias': path}
+    try:
+        data.update(request.json)
+    except ValueError:
+        abort(400)
+    for k in ('alias', 'url'):
+        if k not in data:
+            abort(400)
+    q = Alias.alias == data['alias']
+    res = rdb.search(q)
+    if res:
+        print('Update', rdb, data)
+        rdb.update(data, q)
+    else:
+        print('Insert', rdb,  data)
+        rdb.insert(data)
+    db_name = db_name.strip('_')
+    return {db_name: data}
+
+
+@route('/admin/<path:path>', method='DELETE')
+@auth_basic(check_auth)
+def admin_delete(path='/'):
+    path = path.strip('/')
+    if '/' in path:
+        try:
+            db_name, path = path.split('/')
+        except Exception:
+            abort(400)
+    else:
+        db_name = '_default'
+    if db_name not in db.tables():
+        abort(404)
+    rdb = db.table(db_name)
+    data = dict(alias=path)
+    rdb.remove(Alias.alias == data['alias'])
+    return {}
+
+
+@route('/<path:path>')
+def index(path):
+    req = Request(request.environ)
+    bm = req.accept.best_match(['text/html', 'application/json'])
+    print(path, bm)
+    path = [p for p in path.split('/', 1) if p]
+    if len(path) == 1:
+        path.insert(0, '_default')
+    db_name, alias = path[0:2]
+    if db_name not in db.tables():
+        abort(404)
+    rdb = db.table(db_name)
+    res = rdb.search(Alias.alias == alias)
+    if len(res):
+        data = res[0]
+        if 'application/json' in bm:
+            return data
+        else:
+            return redirect(data['url'])
+    else:
+        abort(404)
+
+
+@error(404)
+def error_404(e):
+    req = Request(request.environ)
+    bm = req.accept.best_match(['text/html', 'application/json'])
+    if 'application/json' in bm:
+        return {}
+    return "404"
+
+
+def main():
+    if 'ADMIN_PASSWORD' not in os.environ:
+        debug(mode=True)
+    run(host='0.0.0.0', port=4444, reloader=True)
+
+
+application = default_app()

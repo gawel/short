@@ -19,16 +19,7 @@ def test_admin(admin_app, db):
     assert 'default' not in data
     assert len(data['a']) == 2
 
-    resp = admin_app.post_json('/admin/a/',
-                               dict(url='http://tata.com'),
-                               status='*')
-    assert resp.status_int == 400
-
-    data = dict(alias='c', url='http://tata.com')
-    resp = admin_app.post_json('/admin/a/', data)
-    assert resp.json['a'] == data
-
-    data.pop('alias')
+    data = dict(url='http://tata.com')
     resp = admin_app.post_json('/admin/a/c/', data)
     assert resp.json['a'] == dict(data, alias='c')
 
@@ -38,6 +29,21 @@ def test_admin(admin_app, db):
     resp = admin_app.delete('/admin/a/c')
     assert resp.status_int == 200
     assert resp.json == {}
+
+    resp = admin_app.delete('/admin/b/a', status=404)
+    assert resp.status_int == 404
+
+    resp = admin_app.delete('/admin/a/b/c', status=400)
+    assert resp.status_int == 400
+
+    data = dict(url='http://tata.com')
+    resp = admin_app.post_json('/admin/a/b/c/', data, status=400)
+    assert resp.status_int == 400
+
+
+def test_bad_get(admin_app, db):
+    resp = admin_app.get('/c/d', status=404)
+    assert resp.status_int == 404
 
 
 def test_app(app, db):
