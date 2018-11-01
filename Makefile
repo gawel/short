@@ -1,9 +1,10 @@
 APP:=$(shell basename `pwd`)
 HOSTNAME:=$(shell hostname)
 HOST:=amandine
+PYTHON?=$(HOME)/.venvs/py3/bin/python3
 
 venv:
-	python3 -m venv venv
+	 $(PYTHON) -m venv venv
 	./venv/bin/pip install -e .
 
 test:
@@ -12,7 +13,7 @@ test:
 serve: venv
 	./venv/bin/$(APP) --serve
 
-upgrade:
+upgrade: venv
 ifeq ($(HOSTNAME), $(HOST))
 	git pull origin master
 	~/apps/bin/circusctl restart $(APP)
