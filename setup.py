@@ -35,6 +35,7 @@ setup(
         'bottle',
         'requests',
         'waitress',
+        'chausette',
     ],
     extras_require={
         'test': [
