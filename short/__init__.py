@@ -4,10 +4,15 @@ from operator import itemgetter
 from webob import Request
 from tinydb import (TinyDB, Query)
 from bottle import (
-    route, run, debug, request, template, default_app, redirect,
+    Bottle,
+    run, debug, request, template, redirect,
     auth_basic, abort, error,
 )
 
+ROOT = os.path.dirname(os.path.dirname(__file__))
+TEMPLATE_PATH = [os.path.join(ROOT, 'views')]
+
+app = Bottle()
 db_path = os.path.expanduser('~/.short.json')
 db = TinyDB(db_path, sort_keys=True, indent=4)
 
@@ -36,7 +41,7 @@ def get_db(path):
     return db_name, rdb
 
 
-@route('/clean')
+@app.route('/clean')
 def clean():
     for table in db.tables():
         items = db.table(table).all()
@@ -45,8 +50,8 @@ def clean():
     return redirect('/admin/')
 
 
-@route('/admin/')
-@route('/admin/<path:path>')
+@app.route('/admin/')
+@app.route('/admin/<path:path>')
 @auth_basic(check_auth)
 def admin(path=''):
     req = Request(request.environ)
@@ -64,12 +69,14 @@ def admin(path=''):
     print('bm', bm)
     if 'application/json' not in bm:
         return template('admin', sorted=sorted, itemgetter=itemgetter,
-                        results=result.items())
+                        results=result.items(),
+                        template_lookup=TEMPLATE_PATH,
+                        )
     return result
 
 
-@route('/admin/', method='POST')
-@route('/admin/<path:path>', method='POST')
+@app.route('/admin/', method='POST')
+@app.route('/admin/<path:path>', method='POST')
 @auth_basic(check_auth)
 def admin_post(path=''):
     if request.content_type != 'application/json':
@@ -101,7 +108,7 @@ def admin_post(path=''):
     return {db_name: data}
 
 
-@route('/admin/<path:path>', method='DELETE')
+@app.route('/admin/<path:path>', method='DELETE')
 @auth_basic(check_auth)
 def admin_delete(path='/'):
     path = path.strip('/')
@@ -120,12 +127,15 @@ def admin_delete(path='/'):
     return {}
 
 
-@route('/')
+@app.route('/')
 def index():
-    return template('index', msg='Hi there')
+    return template(
+        'index', msg='Hi there',
+        template_lookup=TEMPLATE_PATH,
+    )
 
 
-@route('/<path:path>')
+@app.route('/<path:path>')
 def rdr(path):
     req = Request(request.environ)
     bm = req.accept.best_match(['text/html', 'application/json'])
@@ -154,13 +164,16 @@ def error_404(e):
     bm = req.accept.best_match(['text/html', 'application/json'])
     if 'application/json' in bm:
         return {}
-    return template('index', msg='Not found')
+    return template(
+        'index', msg='Not found',
+        template_lookup=TEMPLATE_PATH,
+    )
 
 
 def main():
     if 'ADMIN_PASSWORD' not in os.environ:
         debug(mode=True)
-    run(host='0.0.0.0', port=4444, reloader=True)
+    run(app, host='0.0.0.0', port=4444, reloader=True)
 
 
-application = default_app()
+application = app
