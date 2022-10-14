@@ -16,12 +16,11 @@ app = Bottle()
 db_path = os.path.expanduser('~/.short.json')
 db = TinyDB(db_path, sort_keys=True, indent=4)
 
-auth = tuple(os.environ.get('SHORT_AUTH', 'admimin:passwd').split(':'))
-
 Alias = Query()
 
 
 def check_auth(user, pw):
+    auth = ('admimin', os.environ.get('ADMIN_PASSWORD', 'passwd'))
     if (user, pw) == auth:
         return True
     return False
